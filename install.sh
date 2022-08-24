@@ -1,0 +1,1 @@
+s=sillyGirl;a=arm64;if [[ $(uname -a | grep "x86_64") != "" ]];then a=amd64;fi ;if [ ! -d $s ];then mkdir $s;fi ;cd $s;curl -o $s http://app.imdraw.com/sillyGirl_linux_$a && chmod 777 $s;cd ..;$(pwd)/$s/$s && $(pwd)/$s/$s -t

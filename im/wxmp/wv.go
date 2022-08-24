@@ -1,0 +1,86 @@
+package wxgzh
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/cdle/sillyGirl/core"
+	"github.com/gin-gonic/gin"
+	server "github.com/rixingyike/wechat"
+)
+
+var wxsv = core.MakeBucket("wxsv")
+var app *server.Server
+
+func init() {
+	if wxsv.GetString("app_id") == "" {
+		return
+	}
+	app = server.New(&server.WxConfig{
+		AppId:          wxsv.GetString("app_id"),
+		Secret:         wxsv.GetString("app_secret"),
+		Token:          wxsv.GetString("token"),
+		EncodingAESKey: wxsv.GetString("encoding_aes_key"),
+		DateFormat:     "XML",
+	})
+
+	core.Pushs["wxsv"] = func(i1 interface{}, s1 string, _ interface{}, _ string) {
+		app.SendText(fmt.Sprint(i1), s1)
+	}
+	core.OttoFuncs["GetWxmpAccessToken"] = app.GetAccessToken
+	core.Server.Any("/wxsv/", func(c *gin.Context) {
+		ctx := app.VerifyURL(c.Writer, c.Request)
+		sender := &Sender{}
+
+		if ctx.Msg.Event == "subscribe" {
+			sender.admin = true
+			ctx.Msg.Content = "wxsv subscribe"
+		}
+
+		if ctx.Msg.EventKey != "" {
+			ctx.Msg.Content = "set machineId " + strings.Replace(ctx.Msg.EventKey, "qrscene_", "", -1)
+		}
+
+		if ctx.Msg.Event == "CLICK" {
+			sender.admin = true
+			ctx.Msg.Content = "wxsv " + ctx.Msg.EventKey
+		}
+
+		sender.tp = "wxsv"
+		sender.Message = ctx.Msg.Content
+		sender.uid = ctx.Msg.FromUserName
+		sender.ctx = ctx
+		core.Senders <- sender
+	})
+
+	core.AddCommand("", []core.Function{
+		{
+			Admin: true,
+			Rules: []string{"init wxsv"},
+			Handle: func(_ core.Sender) interface{} {
+				c := &core.Faker{
+					Type:    "carry",
+					Message: "wxsv init",
+					Carry:   make(chan string),
+				}
+				core.Senders <- c
+				f := ""
+				for {
+					v, ok := <-c.Listen()
+					if !ok {
+						break
+					}
+					f = v
+				}
+				bt := server.Menu{}
+				json.Unmarshal([]byte(f), &bt)
+				if len(bt.Button) < 0 {
+					return "没解析出菜单，" + f
+				}
+				app.AddMenu(&bt)
+				return f
+			},
+		},
+	})
+}
